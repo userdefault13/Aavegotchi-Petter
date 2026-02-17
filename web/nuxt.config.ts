@@ -10,6 +10,8 @@ export default defineNuxtConfig({
     privateKey: process.env.PRIVATE_KEY,
     walletAddress: process.env.WALLET_ADDRESS,
     baseRpcUrl: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
+    reportSecret: process.env.REPORT_SECRET,
+    petterAddress: process.env.PETTER_ADDRESS || process.env.WALLET_ADDRESS,
     public: {
       allowedAddress: process.env.ALLOWED_ADDRESS || '0x2127aa7265d573aa467f1d73554d17890b872e76',
     }

@@ -11,6 +11,8 @@
         </button>
       </div>
       
+      <HealthStats />
+      <DelegationCard />
       <BotControl />
       <TransactionList />
       <ErrorList />

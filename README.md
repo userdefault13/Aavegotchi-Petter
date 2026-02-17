@@ -136,6 +136,22 @@ The bot includes:
 - **Diamond Contract**: `0xA99c4B08201F2913Db8D28e71d020c4298F29dBF`
 - **Key Function**: `interact(uint256[] calldata _tokenIds)`
 
+## Deployment
+
+- **Cloudflare Worker**: Petting bot runs on a cron (every 12 hours). See [DEPLOYMENT.md](./DEPLOYMENT.md).
+- **Vercel Dashboard**: Health check, stats, and bot control. See [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+### Quick Deploy
+
+```bash
+# 1. Deploy Cloudflare Worker
+cd worker && npm install && wrangler secret put PRIVATE_KEY  # etc.
+npm run deploy
+
+# 2. Deploy Vercel Dashboard
+cd web && vercel
+```
+
 ## License
 
 MIT

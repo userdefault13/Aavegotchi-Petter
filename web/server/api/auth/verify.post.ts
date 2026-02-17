@@ -1,6 +1,7 @@
 import { verifySignature, createSession, isAddressAllowed } from '~/lib/auth';
 
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig();
   const body = await readBody(event);
   const { address, message, signature } = body;
 
@@ -11,14 +12,15 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!isAddressAllowed(address)) {
+  const allowedAddress = config.allowedAddress;
+  if (!isAddressAllowed(address, allowedAddress)) {
     throw createError({
       statusCode: 403,
       message: 'Address not whitelisted',
     });
   }
 
-  const isValid = await verifySignature(address, message, signature);
+  const isValid = await verifySignature(address, message, signature, allowedAddress);
 
   if (!isValid) {
     throw createError({

@@ -85,3 +85,38 @@ export async function clearErrors(): Promise<void> {
   await kv.del('errors');
 }
 
+// Delegated owners (EIP PetOperator - owners who approved our petter to pet on their behalf)
+// Stored as JSON array for compatibility
+export async function getDelegatedOwners(): Promise<string[]> {
+  try {
+    const owners = await kv.get<string[]>('delegated:owners');
+    return owners || [];
+  } catch (error) {
+    console.error('Error getting delegated owners:', error);
+    return [];
+  }
+}
+
+export async function addDelegatedOwner(owner: string): Promise<void> {
+  const normalized = owner.toLowerCase();
+  const owners = await getDelegatedOwners();
+  if (!owners.includes(normalized)) {
+    owners.push(normalized);
+    await kv.set('delegated:owners', owners);
+  }
+}
+
+export async function removeDelegatedOwner(owner: string): Promise<void> {
+  const normalized = owner.toLowerCase();
+  const owners = await getDelegatedOwners();
+  const filtered = owners.filter((o) => o !== normalized);
+  if (filtered.length !== owners.length) {
+    await kv.set('delegated:owners', filtered);
+  }
+}
+
+export async function isDelegatedOwner(owner: string): Promise<boolean> {
+  const owners = await getDelegatedOwners();
+  return owners.includes(owner.toLowerCase());
+}
+

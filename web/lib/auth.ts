@@ -1,16 +1,18 @@
 import { verifyMessage } from 'viem';
 import { getCookie, setCookie, deleteCookie } from 'h3';
 
-const ALLOWED_ADDRESS = '0x2127aa7265d573aa467f1d73554d17890b872e76'.toLowerCase();
+const DEFAULT_ALLOWED = '0x2127aa7265d573aa467f1d73554d17890b872e76'.toLowerCase();
 
-export function isAddressAllowed(address: string): boolean {
-  return address.toLowerCase() === ALLOWED_ADDRESS;
+export function isAddressAllowed(address: string, allowedAddress?: string): boolean {
+  const allowed = (allowedAddress || DEFAULT_ALLOWED).toLowerCase();
+  return address.toLowerCase() === allowed;
 }
 
 export async function verifySignature(
   address: string,
   message: string,
-  signature: string
+  signature: string,
+  allowedAddress?: string
 ): Promise<boolean> {
   try {
     const isValid = await verifyMessage({
@@ -18,7 +20,7 @@ export async function verifySignature(
       message,
       signature: signature as `0x${string}`,
     });
-    return isValid && isAddressAllowed(address);
+    return isValid && isAddressAllowed(address, allowedAddress);
   } catch (error) {
     console.error('Signature verification error:', error);
     return false;
@@ -34,9 +36,9 @@ export function createSession(event: any, address: string): void {
   });
 }
 
-export function getSession(event: any): string | null {
+export function getSession(event: any, allowedAddress?: string): string | null {
   const session = getCookie(event, 'auth_session');
-  if (session && isAddressAllowed(session)) {
+  if (session && isAddressAllowed(session, allowedAddress)) {
     return session;
   }
   return null;
@@ -46,8 +48,18 @@ export function clearSession(event: any): void {
   deleteCookie(event, 'auth_session');
 }
 
-export function checkAuth(event: any): boolean {
-  const session = getSession(event);
-  return session !== null;
+export function checkAuth(event: any, allowedAddress?: string): boolean {
+  let allowed = allowedAddress;
+  if (!allowed) {
+    try {
+      const config = useRuntimeConfig();
+      allowed = config.allowedAddress;
+    } catch {
+      allowed = DEFAULT_ALLOWED;
+    }
+  }
+  const session = getCookie(event, 'auth_session');
+  if (!session) return false;
+  return isAddressAllowed(session, allowed);
 }
 

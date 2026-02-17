@@ -1,0 +1,10 @@
+name = "aavegotchi-petter"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Cron: every 12 hours at 00:00 and 12:00 UTC
+[triggers]
+crons = ["0 0,12 * * *"]
+
+# Secrets (set via: wrangler secret put PRIVATE_KEY)
+# Required: PRIVATE_KEY, WALLET_ADDRESS, BASE_RPC_URL, DASHBOARD_URL, REPORT_SECRET
