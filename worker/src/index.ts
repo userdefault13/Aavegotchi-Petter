@@ -41,6 +41,7 @@ async function reportToDashboard(
     transactionHash?: string;
     blockNumber?: number;
     gasUsed?: string;
+    gasCostWei?: string;
     petted?: number;
     tokenIds?: string[];
     message?: string;
@@ -201,6 +202,11 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
     throw new Error("Transaction receipt is null");
   }
 
+  const gasCostWei =
+    receipt.gasUsed && receipt.effectiveGasPrice
+      ? (receipt.gasUsed * receipt.effectiveGasPrice).toString()
+      : undefined;
+
   const result: RunResult = {
     success: true,
     message: `Petted ${readyToPet.length} Aavegotchi(s)`,
@@ -215,6 +221,7 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
     transactionHash: tx.hash,
     blockNumber: receipt.blockNumber,
     gasUsed: receipt.gasUsed.toString(),
+    gasCostWei,
     petted: readyToPet.length,
     tokenIds: readyToPet,
     logs,
