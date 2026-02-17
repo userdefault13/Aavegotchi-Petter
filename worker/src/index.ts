@@ -78,6 +78,23 @@ async function fetchDelegatedOwners(env: Env): Promise<string[]> {
   return data.owners || [];
 }
 
+/** Fetch Base RPC URL from dashboard so worker uses same RPC as dashboard (avoids mismatch) */
+async function fetchBaseRpcUrl(env: Env): Promise<string> {
+  const url = `${env.DASHBOARD_URL.replace(/\/$/, "")}/api/bot/config`;
+  try {
+    const res = await fetch(url, {
+      headers: { "X-Report-Secret": env.REPORT_SECRET },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { baseRpcUrl?: string };
+      if (data.baseRpcUrl) return data.baseRpcUrl;
+    }
+  } catch (err) {
+    console.error("Failed to fetch dashboard RPC config:", err);
+  }
+  return env.BASE_RPC_URL;
+}
+
 interface RunResult {
   success: boolean;
   message: string;
@@ -94,7 +111,9 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
 
   validateEnv(env);
   log("info", `Starting run (force=${options?.force ?? false})`);
-  const provider = new ethers.JsonRpcProvider(env.BASE_RPC_URL);
+  const baseRpcUrl = await fetchBaseRpcUrl(env);
+  log("info", `Using RPC: ${baseRpcUrl.replace(/\/\/[^/]+@/, "//***@").slice(0, 50)}...`);
+  const provider = new ethers.JsonRpcProvider(baseRpcUrl);
   const wallet = new ethers.Wallet(env.PRIVATE_KEY, provider);
   const contract = new ethers.Contract(
     AAVEGOTCHI_DIAMOND_ADDRESS,
