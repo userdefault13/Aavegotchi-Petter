@@ -1,4 +1,4 @@
-import { verifySignature, createSession, isAddressAllowed } from '~/lib/auth';
+import { verifySignature, createSession, isAddressAllowed } from '../../../lib/auth';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();

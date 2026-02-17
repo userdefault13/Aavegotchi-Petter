@@ -1,4 +1,4 @@
-import { getDelegatedOwners } from '~/lib/kv';
+import { getDelegatedOwners } from '../../lib/kv';
 
 // For Cloudflare Worker - fetches list of owners who delegated petting to us
 // Auth via X-Report-Secret (same as report endpoint)

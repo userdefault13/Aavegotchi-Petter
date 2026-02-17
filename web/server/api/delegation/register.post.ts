@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { getCookie } from 'h3';
-import { addDelegatedOwner, isDelegatedOwner, checkAuth } from '~/lib';
+import { addDelegatedOwner, isDelegatedOwner, checkAuth } from '../../../lib';
 
 const AAVEGOTCHI_DIAMOND_ADDRESS = '0xA99c4B08201F2913Db8D28e71d020c4298F29dBF';
 

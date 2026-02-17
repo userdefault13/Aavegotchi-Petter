@@ -1,4 +1,4 @@
-import { checkAuth } from '~/lib/auth';
+import { checkAuth } from '../../../lib/auth';
 
 export default defineEventHandler(async (event) => {
   const isAuthenticated = checkAuth(event);

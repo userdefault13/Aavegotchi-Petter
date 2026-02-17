@@ -47,4 +47,3 @@ onMounted(() => {
   checkAuth();
 });
 </script>
-

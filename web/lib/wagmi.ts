@@ -2,13 +2,19 @@ import { createConfig, http } from '@wagmi/core';
 import { base } from '@wagmi/core/chains';
 import { injected } from '@wagmi/core/connectors';
 
+const metaMaskConnector = injected({ target: 'metaMask' });
+const coinbaseConnector = injected({ target: 'coinbaseWallet' });
+
 export const wagmiConfig = createConfig({
   chains: [base],
-  connectors: [injected()],
+  connectors: [metaMaskConnector, coinbaseConnector],
+  ssr: true,
   transports: {
     [base.id]: http(),
   },
 });
+
+export { metaMaskConnector, coinbaseConnector };
 
 export const AAVEGOTCHI_DIAMOND_ADDRESS = '0xA99c4B08201F2913Db8D28e71d020c4298F29dBF' as const;
 

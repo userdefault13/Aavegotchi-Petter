@@ -1,8 +1,25 @@
+import path from 'node:path'
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxtjs/tailwindcss'],
+  nitro: {
+    preset: 'vercel',
+  },
+  modules: [
+    '@nuxtjs/tailwindcss',
+    (_options: any, nuxt: any) => {
+      nuxt.hook('modules:done', () => {
+        const root = nuxt.options.rootDir ?? process.cwd()
+        const postcssOptions = (nuxt.options as any).postcss ?? (nuxt.options.build as any)?.postcss?.postcssOptions ?? (nuxt.options.build as any)?.postcss
+        const plugins = postcssOptions?.plugins as Record<string, unknown> | undefined
+        if (plugins?.tailwindcss && typeof plugins.tailwindcss === 'string' && plugins.tailwindcss.includes('.nuxt/tailwind/postcss.mjs')) {
+          plugins.tailwindcss = path.join(root, 'tailwind.config.js')
+        }
+      })
+    },
+  ],
   runtimeConfig: {
     kvRestApiUrl: process.env.KV_REST_API_URL,
     kvRestApiToken: process.env.KV_REST_API_TOKEN,

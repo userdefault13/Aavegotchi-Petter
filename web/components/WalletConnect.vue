@@ -1,14 +1,23 @@
 <template>
   <div class="wallet-connect">
     <div v-if="!isConnected" class="space-y-4">
-      <p class="text-gray-600">Connect your MetaMask wallet to continue</p>
-      <button
-        @click="connectWallet"
-        :disabled="connecting"
-        class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {{ connecting ? 'Connecting...' : 'Connect Wallet' }}
-      </button>
+      <p class="text-gray-600">Connect with MetaMask or Coinbase Wallet</p>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button
+          @click="connectWallet('metaMask')"
+          :disabled="connecting"
+          class="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {{ connecting ? 'Connecting...' : 'MetaMask' }}
+        </button>
+        <button
+          @click="connectWallet('coinbaseWallet')"
+          :disabled="connecting"
+          class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {{ connecting ? 'Connecting...' : 'Coinbase Wallet' }}
+        </button>
+      </div>
       <p v-if="error" class="text-red-600 text-sm">{{ error }}</p>
     </div>
     <div v-else class="space-y-4">
@@ -38,8 +47,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { getAccount, connect, disconnect, signMessage as wagmiSignMessage } from '@wagmi/core';
-import { wagmiConfig } from '~/lib/wagmi';
-import { injected } from '@wagmi/core/connectors';
+import { wagmiConfig, metaMaskConnector, coinbaseConnector } from '~/lib/wagmi';
 
 const address = ref<string>('');
 const isConnected = ref(false);
@@ -59,16 +67,12 @@ const checkAuth = async () => {
   }
 };
 
-const connectWallet = async () => {
+const connectWallet = async (target: 'metaMask' | 'coinbaseWallet') => {
   connecting.value = true;
   error.value = '';
   
   try {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      throw new Error('MetaMask not found. Please install MetaMask.');
-    }
-
-    const connector = injected();
+    const connector = target === 'metaMask' ? metaMaskConnector : coinbaseConnector;
     const result = await connect(wagmiConfig, { connector });
     
     if (result.accounts && result.accounts[0]) {
@@ -83,7 +87,12 @@ const connectWallet = async () => {
       }
     }
   } catch (err: any) {
-    error.value = err.message || 'Failed to connect wallet';
+    const msg = err.message || 'Failed to connect wallet';
+    if (msg.includes('ethereum') && msg.includes('getter')) {
+      error.value = 'Wallet conflict detected. Try disabling other wallet extensions or use a private window with only MetaMask or Coinbase Wallet.';
+    } else {
+      error.value = msg;
+    }
     isConnected.value = false;
   } finally {
     connecting.value = false;
@@ -113,7 +122,7 @@ const signMessage = async () => {
     
     if (response.success) {
       isAuthenticated.value = true;
-      await navigateTo('/dashboard');
+      await navigateTo('/');
     }
   } catch (err: any) {
     error.value = err.message || 'Failed to sign message';
@@ -136,13 +145,12 @@ const disconnectWallet = async () => {
 };
 
 onMounted(async () => {
-  if (typeof window !== 'undefined' && window.ethereum) {
-    const account = getAccount(wagmiConfig);
-    if (account.isConnected && account.address) {
-      address.value = account.address;
-      isConnected.value = true;
-      await checkAuth();
-    }
+  if (typeof window === 'undefined') return;
+  const account = getAccount(wagmiConfig);
+  if (account.isConnected && account.address) {
+    address.value = account.address;
+    isConnected.value = true;
+    await checkAuth();
   }
 });
 </script>

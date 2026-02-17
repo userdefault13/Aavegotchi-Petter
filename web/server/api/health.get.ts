@@ -1,4 +1,4 @@
-import { getBotState, getTransactions, getErrors } from '~/lib/kv';
+import { getBotState, getTransactions, getErrors } from '../../lib/kv';
 
 export default defineEventHandler(async () => {
   try {

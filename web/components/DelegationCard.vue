@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { writeContract } from '@wagmi/core';
+import { getWalletClient, writeContract } from '@wagmi/core';
 import { wagmiConfig } from '~/lib/wagmi';
 import { AAVEGOTCHI_DIAMOND_ADDRESS, AAVEGOTCHI_FACET_ABI } from '~/lib/wagmi';
 

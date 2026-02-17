@@ -1,4 +1,4 @@
-import { addTransaction, addError, getBotState, setBotState } from '~/lib/kv';
+import { addTransaction, addError, getBotState, setBotState } from '../../../lib/kv';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();

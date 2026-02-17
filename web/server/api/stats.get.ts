@@ -1,4 +1,4 @@
-import { getTransactions, getErrors, getBotState, checkAuth } from '~/lib';
+import { getTransactions, getErrors, getBotState, checkAuth } from '../../lib';
 
 export default defineEventHandler(async (event) => {
   if (!checkAuth(event)) {

@@ -1,4 +1,4 @@
-import { getErrors, checkAuth } from '~/lib';
+import { getErrors, checkAuth } from '../../../lib';
 
 export default defineEventHandler(async (event) => {
   if (!checkAuth(event)) {

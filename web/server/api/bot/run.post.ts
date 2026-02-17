@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { addTransaction, addError, getBotState, setBotState } from '~/lib/kv';
+import { addTransaction, addError, getBotState, setBotState } from '../../../lib/kv';
 
 const AAVEGOTCHI_DIAMOND_ADDRESS = '0xA99c4B08201F2913Db8D28e71d020c4298F29dBF';
 

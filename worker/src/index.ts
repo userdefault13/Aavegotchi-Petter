@@ -16,6 +16,24 @@ export interface Env {
   REPORT_SECRET: string;
 }
 
+function validateEnv(env: Env): void {
+  const missing: string[] = [];
+  if (!env.PRIVATE_KEY) missing.push("PRIVATE_KEY");
+  if (!env.WALLET_ADDRESS) missing.push("WALLET_ADDRESS");
+  if (!env.BASE_RPC_URL) missing.push("BASE_RPC_URL");
+  if (!env.DASHBOARD_URL) missing.push("DASHBOARD_URL");
+  if (!env.REPORT_SECRET) missing.push("REPORT_SECRET");
+  if (missing.length > 0) {
+    throw new Error(`Missing required secrets: ${missing.join(", ")}. Set via: wrangler secret put <name>`);
+  }
+}
+
+export interface WorkerLogEntry {
+  timestamp: number;
+  level: "info" | "warn" | "error";
+  message: string;
+}
+
 async function reportToDashboard(
   env: Env,
   result: {
@@ -27,6 +45,7 @@ async function reportToDashboard(
     tokenIds?: string[];
     message?: string;
     error?: string;
+    logs?: WorkerLogEntry[];
   }
 ) {
   const url = `${env.DASHBOARD_URL.replace(/\/$/, "")}/api/bot/report`;
@@ -59,7 +78,22 @@ async function fetchDelegatedOwners(env: Env): Promise<string[]> {
   return data.owners || [];
 }
 
-async function runPetting(env: Env): Promise<void> {
+interface RunResult {
+  success: boolean;
+  message: string;
+  petted?: number;
+  transactionHash?: string;
+  blockNumber?: number;
+}
+
+async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunResult> {
+  const logs: WorkerLogEntry[] = [];
+  const log = (level: WorkerLogEntry["level"], message: string) => {
+    logs.push({ timestamp: Date.now(), level, message });
+  };
+
+  validateEnv(env);
+  log("info", `Starting run (force=${options?.force ?? false})`);
   const provider = new ethers.JsonRpcProvider(env.BASE_RPC_URL);
   const wallet = new ethers.Wallet(env.PRIVATE_KEY, provider);
   const contract = new ethers.Contract(
@@ -70,9 +104,14 @@ async function runPetting(env: Env): Promise<void> {
 
   // EIP PetOperator: fetch owners who delegated petting to us
   const delegatedOwners = await fetchDelegatedOwners(env);
+  log("info", `Fetched ${delegatedOwners.length} delegated owner(s): ${delegatedOwners.join(", ") || "(none)"}`);
 
   // Also support legacy: petter wallet's own gotchis
-  const ownersToCheck = [...new Set([env.WALLET_ADDRESS.toLowerCase(), ...delegatedOwners.map((o) => o.toLowerCase())])];
+  const delegatedLower = (delegatedOwners || [])
+    .filter((o): o is string => typeof o === "string" && o.length > 0)
+    .map((o) => o.toLowerCase());
+  const ownersToCheck = [...new Set([env.WALLET_ADDRESS.toLowerCase(), ...delegatedLower])];
+  log("info", `Checking ${ownersToCheck.length} owner(s) for gotchis`);
 
   const allTokenIds: string[] = [];
   for (const owner of ownersToCheck) {
@@ -80,48 +119,62 @@ async function runPetting(env: Env): Promise<void> {
       const tokenIds = await contract.tokenIdsOfOwner(owner);
       const ids = tokenIds.map((id: ethers.BigNumberish) => id.toString());
       allTokenIds.push(...ids);
+      log("info", `Owner ${owner.slice(0, 10)}...: ${ids.length} gotchi(s)`);
     } catch (err) {
-      console.error(`Error fetching tokens for ${owner}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      log("error", `tokenIdsOfOwner(${owner.slice(0, 10)}...): ${msg}`);
     }
   }
 
   if (allTokenIds.length === 0) {
-    await reportToDashboard(env, {
-      success: true,
-      message: delegatedOwners.length > 0 ? "No Aavegotchis found for delegated owners" : "No delegated owners or Aavegotchis found",
-      petted: 0,
-    });
-    return;
+    const msg = delegatedOwners.length > 0 ? "No Aavegotchis found for delegated owners" : "No delegated owners or Aavegotchis found";
+    log("info", msg);
+    await reportToDashboard(env, { success: true, message: msg, petted: 0, logs });
+    return { success: true, message: msg, petted: 0 };
   }
 
-  const currentBlock = await provider.getBlock("latest");
-  const currentTimestamp =
-    currentBlock?.timestamp || Math.floor(Date.now() / 1000);
+  const skipCooldown = options?.force === true;
 
   const readyToPet: string[] = [];
-  for (const tokenId of allTokenIds) {
-    try {
-      const gotchi = await contract.getAavegotchi(tokenId);
-      const lastInteractedTimestamp = Number(gotchi.lastInteracted);
-      const hoursSinceInteraction =
-        (currentTimestamp - lastInteractedTimestamp) / 3600;
-      if (hoursSinceInteraction >= 12) {
-        readyToPet.push(tokenId);
+  if (skipCooldown) {
+    readyToPet.push(...allTokenIds);
+  } else {
+    const currentBlock = await provider.getBlock("latest");
+    const currentTimestamp =
+      currentBlock?.timestamp || Math.floor(Date.now() / 1000);
+
+    let anyNeedsKinship = false;
+    for (const tokenId of allTokenIds) {
+      try {
+        const gotchi = await contract.getAavegotchi(tokenId);
+        const lastInteractedTimestamp = Number(gotchi.lastInteracted);
+        const hoursSinceInteraction =
+          (currentTimestamp - lastInteractedTimestamp) / 3600;
+        if (hoursSinceInteraction >= 12) {
+          anyNeedsKinship = true;
+          break;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("warn", `getAavegotchi(${tokenId}): ${msg}`);
       }
-    } catch (err) {
-      console.error(`Error checking Aavegotchi ${tokenId}:`, err);
+    }
+    // If any gotchi needs kinship (past 12h), pet ALL gotchis in one batch
+    if (anyNeedsKinship) {
+      readyToPet.push(...allTokenIds);
     }
   }
 
   if (readyToPet.length === 0) {
-    await reportToDashboard(env, {
-      success: true,
-      message: "No Aavegotchis ready to pet",
-      petted: 0,
-    });
-    return;
+    const msg = skipCooldown
+      ? "No Aavegotchis to pet."
+      : `No Aavegotchis ready for kinship (12h cooldown). Checked ${allTokenIds.length} gotchis.`;
+    log("info", msg);
+    await reportToDashboard(env, { success: true, message: msg, petted: 0, logs });
+    return { success: true, message: msg, petted: 0 };
   }
 
+  log("info", `Petting ${readyToPet.length} gotchi(s)`);
   const tx = await contract.interact(readyToPet);
   const receipt = await tx.wait();
 
@@ -129,14 +182,25 @@ async function runPetting(env: Env): Promise<void> {
     throw new Error("Transaction receipt is null");
   }
 
+  const result: RunResult = {
+    success: true,
+    message: `Petted ${readyToPet.length} Aavegotchi(s)`,
+    petted: readyToPet.length,
+    transactionHash: tx.hash,
+    blockNumber: receipt.blockNumber,
+  };
+  log("info", `Tx ${tx.hash} confirmed`);
   await reportToDashboard(env, {
     success: true,
+    message: result.message,
     transactionHash: tx.hash,
     blockNumber: receipt.blockNumber,
     gasUsed: receipt.gasUsed.toString(),
     petted: readyToPet.length,
     tokenIds: readyToPet,
+    logs,
   });
+  return result;
 }
 
 export default {
@@ -145,31 +209,53 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname === "/health") {
-      return Response.json({
-        status: "ok",
-        service: "aavegotchi-petter",
-        timestamp: new Date().toISOString(),
-      });
-    }
-    if (url.pathname === "/run" && request.method === "POST") {
-      try {
-        await runPetting(env);
-        return Response.json({ success: true, message: "Petting completed" });
-      } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        await reportToDashboard(env, {
-          success: false,
-          error: error.message,
+    try {
+      const url = new URL(request.url);
+      if (url.pathname === "/health") {
+        return Response.json({
+          status: "ok",
+          service: "aavegotchi-petter",
+          timestamp: new Date().toISOString(),
         });
-        return Response.json(
-          { success: false, error: error.message },
-          { status: 500 }
-        );
       }
+      if (url.pathname === "/run" && request.method === "POST") {
+        try {
+          let body: { force?: boolean } = {};
+          try {
+            body = (await request.json()) as { force?: boolean };
+          } catch {
+            /* empty body is ok */
+          }
+          const result = await runPetting(env, { force: body.force });
+          return Response.json(result);
+        } catch (err: unknown) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          const logs: WorkerLogEntry[] = [
+            { timestamp: Date.now(), level: "error", message: error.message },
+          ];
+          try {
+            await reportToDashboard(env, {
+              success: false,
+              error: error.message,
+              logs,
+            });
+          } catch (_) {
+            /* ignore report failure */
+          }
+          return Response.json(
+            { success: false, error: error.message },
+            { status: 500 }
+          );
+        }
+      }
+      return new Response("Not Found", { status: 404 });
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      return Response.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
     }
-    return new Response("Not Found", { status: 404 });
   },
 
   async scheduled(
@@ -178,12 +264,16 @@ export default {
     ctx: ExecutionContext
   ): Promise<void> {
     try {
-      await runPetting(env);
+      const _result = await runPetting(env);
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
+      const logs: WorkerLogEntry[] = [
+        { timestamp: Date.now(), level: "error", message: error.message },
+      ];
       await reportToDashboard(env, {
         success: false,
         error: error.message,
+        logs,
       });
       throw err;
     }
