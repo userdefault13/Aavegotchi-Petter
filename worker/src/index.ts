@@ -12,8 +12,8 @@ export interface Env {
   PRIVATE_KEY: string;
   WALLET_ADDRESS: string; // Petter wallet (pays gas)
   BASE_RPC_URL: string;
-  DASHBOARD_URL: string;
-  REPORT_SECRET: string;
+  DASHBOARD_URL: string; // AavegotchiPetterUI URL (e.g. https://aavegotchi-petter.vercel.app)
+  REPORT_SECRET: string; // Must match REPORT_SECRET in dashboard
 }
 
 function validateEnv(env: Env): void {
@@ -24,7 +24,9 @@ function validateEnv(env: Env): void {
   if (!env.DASHBOARD_URL) missing.push("DASHBOARD_URL");
   if (!env.REPORT_SECRET) missing.push("REPORT_SECRET");
   if (missing.length > 0) {
-    throw new Error(`Missing required secrets: ${missing.join(", ")}. Set via: wrangler secret put <name>`);
+    throw new Error(
+      `Missing required secrets: ${missing.join(", ")}. Set via: wrangler secret put <name>`
+    );
   }
 }
 
@@ -69,14 +71,28 @@ async function reportToDashboard(
 
 async function fetchDelegatedOwners(env: Env): Promise<string[]> {
   const url = `${env.DASHBOARD_URL.replace(/\/$/, "")}/api/delegated-owners`;
-  const res = await fetch(url, {
-    headers: { "X-Report-Secret": env.REPORT_SECRET },
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch delegated owners: ${await res.text()}`);
+  try {
+    const res = await fetch(url, {
+      headers: { "X-Report-Secret": env.REPORT_SECRET },
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(
+        `Failed to fetch delegated owners (${res.status}): ${text.slice(0, 200)}. ` +
+          `Check DASHBOARD_URL (${env.DASHBOARD_URL}) and REPORT_SECRET match the dashboard.`
+      );
+    }
+    const data = JSON.parse(text) as { owners?: string[] };
+    return data.owners || [];
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Failed to fetch delegated owners")) {
+      throw err;
+    }
+    throw new Error(
+      `Failed to fetch delegated owners: ${err instanceof Error ? err.message : String(err)}. ` +
+        `Ensure DASHBOARD_URL and REPORT_SECRET are set correctly.`
+    );
   }
-  const data = (await res.json()) as { owners: string[] };
-  return data.owners || [];
 }
 
 /** Fetch Base RPC URL from dashboard so worker uses same RPC as dashboard (avoids mismatch) */
@@ -195,7 +211,16 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
   }
 
   log("info", `Petting ${readyToPet.length} gotchi(s)`);
-  const tx = await contract.interact(readyToPet);
+  let tx;
+  try {
+    tx = await contract.interact(readyToPet);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Transaction failed: ${msg}. ` +
+        `Check: petter wallet has ETH for gas, all owners have approved setPetOperatorForAll, and RPC is healthy.`
+    );
+  }
   const receipt = await tx.wait();
 
   if (!receipt) {
