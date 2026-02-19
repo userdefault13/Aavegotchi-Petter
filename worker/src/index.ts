@@ -95,21 +95,37 @@ async function fetchDelegatedOwners(env: Env): Promise<string[]> {
   }
 }
 
-/** Fetch Base RPC URL from dashboard so worker uses same RPC as dashboard (avoids mismatch) */
-async function fetchBaseRpcUrl(env: Env): Promise<string> {
+/** Fetch config from dashboard (RPC URL + petting interval) */
+async function fetchDashboardConfig(env: Env): Promise<{
+  baseRpcUrl: string;
+  pettingIntervalHours: number;
+}> {
   const url = `${env.DASHBOARD_URL.replace(/\/$/, "")}/api/bot/config`;
   try {
     const res = await fetch(url, {
       headers: { "X-Report-Secret": env.REPORT_SECRET },
     });
     if (res.ok) {
-      const data = (await res.json()) as { baseRpcUrl?: string };
-      if (data.baseRpcUrl) return data.baseRpcUrl;
+      const data = (await res.json()) as {
+        baseRpcUrl?: string;
+        pettingIntervalHours?: number;
+      };
+      const baseRpcUrl = data.baseRpcUrl || env.BASE_RPC_URL;
+      const pettingIntervalHours =
+        typeof data.pettingIntervalHours === "number" &&
+        data.pettingIntervalHours >= 30 / 3600 &&
+        data.pettingIntervalHours <= 24
+          ? data.pettingIntervalHours
+          : 12;
+      return { baseRpcUrl, pettingIntervalHours };
     }
   } catch (err) {
-    console.error("Failed to fetch dashboard RPC config:", err);
+    console.error("Failed to fetch dashboard config:", err);
   }
-  return env.BASE_RPC_URL;
+  return {
+    baseRpcUrl: env.BASE_RPC_URL,
+    pettingIntervalHours: 12,
+  };
 }
 
 interface RunResult {
@@ -128,8 +144,9 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
 
   validateEnv(env);
   log("info", `Starting run (force=${options?.force ?? false})`);
-  const baseRpcUrl = await fetchBaseRpcUrl(env);
+  const { baseRpcUrl, pettingIntervalHours } = await fetchDashboardConfig(env);
   log("info", `Using RPC: ${baseRpcUrl.replace(/\/\/[^/]+@/, "//***@").slice(0, 50)}...`);
+  log("info", `Petting interval: ${pettingIntervalHours}h`);
   const provider = new ethers.JsonRpcProvider(baseRpcUrl);
   const wallet = new ethers.Wallet(env.PRIVATE_KEY, provider);
   const contract = new ethers.Contract(
@@ -186,7 +203,7 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
         const lastInteractedTimestamp = Number(gotchi.lastInteracted);
         const hoursSinceInteraction =
           (currentTimestamp - lastInteractedTimestamp) / 3600;
-        if (hoursSinceInteraction >= 12) {
+        if (hoursSinceInteraction >= pettingIntervalHours) {
           anyNeedsKinship = true;
           break;
         }
@@ -204,7 +221,7 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
   if (readyToPet.length === 0) {
     const msg = skipCooldown
       ? "No Aavegotchis to pet."
-      : `No Aavegotchis ready for kinship (12h cooldown). Checked ${allTokenIds.length} gotchis.`;
+      : `No Aavegotchis ready for kinship (${pettingIntervalHours}h cooldown). Checked ${allTokenIds.length} gotchis.`;
     log("info", msg);
     await reportToDashboard(env, { success: true, message: msg, petted: 0, logs });
     return { success: true, message: msg, petted: 0 };
