@@ -1,5 +1,4 @@
 # Plan: New Auto Petter
-
 ## Context
 
 The previous Cloudflare Worker was draining funds to `0xeeeee9097186264C53175D3Af6840a8dD5dc7b6C` within seconds of receiving ETH. A new wallet (not added to the worker) had no outbound transactions. The worker code in the repo only calls `contract.interact()` with 0 value—so either the deployed worker differed from the repo, or a dependency/edge case caused the drain. We're starting fresh.
