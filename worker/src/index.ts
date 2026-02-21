@@ -95,10 +95,11 @@ async function fetchDelegatedOwners(env: Env): Promise<string[]> {
   }
 }
 
-/** Fetch config from dashboard (RPC URL + petting interval) */
+/** Fetch config from dashboard (RPC URL, petting interval, running status) */
 async function fetchDashboardConfig(env: Env): Promise<{
   baseRpcUrl: string;
   pettingIntervalHours: number;
+  running: boolean;
 }> {
   const url = `${env.DASHBOARD_URL.replace(/\/$/, "")}/api/bot/config`;
   try {
@@ -109,6 +110,7 @@ async function fetchDashboardConfig(env: Env): Promise<{
       const data = (await res.json()) as {
         baseRpcUrl?: string;
         pettingIntervalHours?: number;
+        running?: boolean;
       };
       const baseRpcUrl = data.baseRpcUrl || env.BASE_RPC_URL;
       const pettingIntervalHours =
@@ -117,7 +119,8 @@ async function fetchDashboardConfig(env: Env): Promise<{
         data.pettingIntervalHours <= 24
           ? data.pettingIntervalHours
           : 12;
-      return { baseRpcUrl, pettingIntervalHours };
+      const running = data.running === true;
+      return { baseRpcUrl, pettingIntervalHours, running };
     }
   } catch (err) {
     console.error("Failed to fetch dashboard config:", err);
@@ -125,6 +128,7 @@ async function fetchDashboardConfig(env: Env): Promise<{
   return {
     baseRpcUrl: env.BASE_RPC_URL,
     pettingIntervalHours: 12,
+    running: false,
   };
 }
 
@@ -144,9 +148,14 @@ async function runPetting(env: Env, options?: { force?: boolean }): Promise<RunR
 
   validateEnv(env);
   log("info", `Starting run (force=${options?.force ?? false})`);
-  const { baseRpcUrl, pettingIntervalHours } = await fetchDashboardConfig(env);
+  const { baseRpcUrl, pettingIntervalHours, running } = await fetchDashboardConfig(env);
   log("info", `Using RPC: ${baseRpcUrl.replace(/\/\/[^/]+@/, "//***@").slice(0, 50)}...`);
   log("info", `Petting interval: ${pettingIntervalHours}h`);
+  if (!running && !options?.force) {
+    log("info", "Bot is stopped (running=false). Skipping. Start the bot in the dashboard to run on schedule.");
+    await reportToDashboard(env, { success: true, message: "Bot stopped, skipped", petted: 0, logs });
+    return { success: true, message: "Bot stopped, skipped", petted: 0 };
+  }
   const provider = new ethers.JsonRpcProvider(baseRpcUrl);
   const wallet = new ethers.Wallet(env.PRIVATE_KEY, provider);
   const contract = new ethers.Contract(
