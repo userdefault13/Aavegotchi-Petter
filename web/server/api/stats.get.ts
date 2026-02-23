@@ -1,4 +1,5 @@
 import { getTransactions, getErrors, getBotState, checkAuth } from '../../lib';
+import { getStatsFromPetter } from '../../lib/petter-api';
 
 export default defineEventHandler(async (event) => {
   if (!checkAuth(event)) {
@@ -8,6 +9,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const config = useRuntimeConfig();
+  if (config.petterApiUrl) {
+    const petterStats = await getStatsFromPetter();
+    if (petterStats) return petterStats;
+  }
   const [transactions, errors, state] = await Promise.all([
     getTransactions(100),
     getErrors(100),

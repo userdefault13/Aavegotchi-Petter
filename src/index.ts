@@ -30,6 +30,13 @@ import { startCron } from './cron.js'
 const app = createApp()
 const router = createRouter()
 
+// Root - API info (no auth)
+router.get('/', eventHandler(() => ({
+  name: 'Aavegotchi Petter API',
+  health: '/health',
+  api: '/api/*',
+})))
+
 // Health (no auth)
 router.get('/health', eventHandler((event) => getHealth(event)))
 
@@ -96,7 +103,7 @@ function handleError<T>(handler: (e: T) => Promise<unknown>) {
 
 app.use(router)
 
-const port = parseInt(process.env.PORT || '3001', 10)
+const port = parseInt(process.env.PORT || '3002', 10)
 
 startCron()
 

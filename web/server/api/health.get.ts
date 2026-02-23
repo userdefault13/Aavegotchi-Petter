@@ -1,7 +1,13 @@
 import { getBotState, getTransactions, getErrors } from '../../lib/kv';
+import { getHealthFromPetter } from '../../lib/petter-api';
 
 export default defineEventHandler(async () => {
   try {
+    const config = useRuntimeConfig();
+    if (config.petterApiUrl) {
+      const petterHealth = await getHealthFromPetter();
+      if (petterHealth) return petterHealth;
+    }
     const [state, transactions, errors] = await Promise.all([
       getBotState(),
       getTransactions(100),

@@ -49,14 +49,15 @@ import { ref, onMounted } from 'vue';
 import { getAccount, connect, disconnect, signMessage as wagmiSignMessage } from '@wagmi/core';
 import { wagmiConfig, metaMaskConnector, coinbaseConnector } from '~/lib/wagmi';
 
+const config = useRuntimeConfig();
+const allowedAddress = (config.public.allowedAddress || '').toLowerCase();
+
 const address = ref<string>('');
 const isConnected = ref(false);
 const isAuthenticated = ref(false);
 const connecting = ref(false);
 const signing = ref(false);
 const error = ref<string>('');
-
-const ALLOWED_ADDRESS = '0x2127aa7265d573aa467f1d73554d17890b872e76'.toLowerCase();
 
 const checkAuth = async () => {
   try {
@@ -79,8 +80,8 @@ const connectWallet = async (target: 'metaMask' | 'coinbaseWallet') => {
       address.value = result.accounts[0];
       isConnected.value = true;
       
-      if (result.accounts[0].toLowerCase() !== ALLOWED_ADDRESS) {
-        error.value = 'Your address is not whitelisted. Only 0x2127aa7265d573aa467f1d73554d17890b872e76 is allowed.';
+      if (allowedAddress && result.accounts[0].toLowerCase() !== allowedAddress) {
+        error.value = `Your address is not whitelisted. Only ${config.public.allowedAddress || allowedAddress} is allowed.`;
         isConnected.value = false;
       } else {
         await checkAuth();

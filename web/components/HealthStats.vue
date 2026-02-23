@@ -8,6 +8,35 @@
       </div>
 
       <div v-else class="space-y-6">
+        <!-- Connection Status: Petter & Tunnel -->
+        <div class="flex flex-wrap gap-3 p-4 rounded-lg bg-gray-50 border border-gray-200">
+          <div class="flex items-center gap-2">
+            <div
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm"
+              :class="connStatus.petter?.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'"
+            >
+              <div class="w-2 h-2 rounded-full" :class="connStatus.petter?.ok ? 'bg-green-500' : 'bg-red-500'" />
+              <span class="font-medium">Petter</span>
+              <span>{{ connStatus.petter?.ok ? 'OK' : 'Offline' }}</span>
+              <span v-if="connStatus.petter?.ok && connStatus.petter?.latencyMs" class="text-green-600">
+                ({{ connStatus.petter.latencyMs }}ms)
+              </span>
+            </div>
+            <div
+              v-if="connStatus.tunnel !== null"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm"
+              :class="connStatus.tunnel?.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'"
+            >
+              <div class="w-2 h-2 rounded-full" :class="connStatus.tunnel?.ok ? 'bg-green-500' : 'bg-red-500'" />
+              <span class="font-medium">Tunnel</span>
+              <span>{{ connStatus.tunnel?.ok ? 'OK' : 'Offline' }}</span>
+              <span v-if="connStatus.tunnel?.ok && connStatus.tunnel?.latencyMs" class="text-green-600">
+                ({{ connStatus.tunnel.latencyMs }}ms)
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Health Status -->
         <div class="flex items-center gap-3 p-4 rounded-lg" :class="healthOk ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'">
           <div class="w-3 h-3 rounded-full" :class="healthOk ? 'bg-green-500' : 'bg-amber-500'" />
@@ -91,6 +120,11 @@ interface HealthResponse {
   };
 }
 
+interface ConnectionStatus {
+  petter: { ok: boolean; latencyMs?: number; error?: string };
+  tunnel: { ok: boolean; latencyMs?: number; error?: string } | null;
+}
+
 interface StatsResponse {
   bot: { running: boolean; lastRun: number | null; lastError: string | null };
   transactions: {
@@ -105,6 +139,7 @@ interface StatsResponse {
 
 const health = ref<HealthResponse | null>(null);
 const stats = ref<StatsResponse | null>(null);
+const connStatus = ref<ConnectionStatus>({ petter: { ok: false }, tunnel: null });
 const loading = ref(true);
 
 const healthOk = computed(() => health.value?.status === 'ok');
@@ -134,9 +169,18 @@ const fetchStats = async () => {
   }
 };
 
+const fetchConnectionStatus = async () => {
+  try {
+    const data = await $fetch<ConnectionStatus>('/api/connection-status');
+    connStatus.value = data;
+  } catch {
+    connStatus.value = { petter: { ok: false }, tunnel: null };
+  }
+};
+
 const refresh = async () => {
   loading.value = true;
-  await Promise.all([fetchHealth(), fetchStats()]);
+  await Promise.all([fetchHealth(), fetchStats(), fetchConnectionStatus()]);
   loading.value = false;
 };
 
@@ -149,5 +193,6 @@ const formatDate = (val: string | number | undefined) => {
 onMounted(() => {
   refresh();
   setInterval(refresh, 30000);
+  setInterval(fetchConnectionStatus, 15000);
 });
 </script>

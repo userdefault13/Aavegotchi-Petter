@@ -1,14 +1,7 @@
 /**
- * Redis client - same interface as AavegotchiPetterUI lib/kv.ts
- * Uses ioredis for local Redis (no cloud).
+ * In-memory storage - same interface as previous Redis-based implementation.
+ * Data is lost on process restart.
  */
-import { createRequire } from 'node:module'
-
-const require = createRequire(import.meta.url)
-const Redis = require('ioredis')
-
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
-export const redis = new Redis(redisUrl)
 
 export interface Transaction {
   hash: string
@@ -33,18 +26,73 @@ export interface WorkerLogEntry {
   message: string
 }
 
+// In-memory storage
+const store: {
+  worker_logs: string[]
+  transactions: string[]
+  manual_triggers: string[]
+  errors: string[]
+  'bot:state': string | null
+  'delegated:owners': string | null
+  'bot:petting_interval_hours': string | null
+} = {
+  worker_logs: [],
+  transactions: [],
+  manual_triggers: [],
+  errors: [],
+  'bot:state': null,
+  'delegated:owners': null,
+  'bot:petting_interval_hours': null,
+}
+
+function lpush(key: keyof typeof store, ...values: string[]): void {
+  const arr = store[key] as string[] | undefined
+  if (!Array.isArray(arr)) return
+  arr.unshift(...values)
+}
+
+function ltrim(key: keyof typeof store, start: number, stop: number): void {
+  const arr = store[key] as string[] | undefined
+  if (!Array.isArray(arr)) return
+  store[key] = arr.slice(0, stop + 1) as any
+}
+
+function lrange(key: keyof typeof store, start: number, stop: number): string[] {
+  const arr = store[key] as string[] | undefined
+  if (!Array.isArray(arr)) return []
+  return arr.slice(start, stop + 1)
+}
+
+function get(key: keyof typeof store): string | null {
+  const val = store[key]
+  if (Array.isArray(val)) return null
+  return val ?? null
+}
+
+function set(key: keyof typeof store, value: string): void {
+  (store as Record<string, unknown>)[key] = value
+}
+
+function del(key: keyof typeof store): void {
+  if (key === 'worker_logs' || key === 'transactions' || key === 'manual_triggers' || key === 'errors') {
+    (store as Record<string, unknown>)[key] = []
+  } else {
+    (store as Record<string, unknown>)[key] = null
+  }
+}
+
 export async function addWorkerLogs(entries: WorkerLogEntry[]): Promise<void> {
   if (!entries.length) return
   for (const e of entries) {
-    await redis.lpush('worker_logs', JSON.stringify(e))
+    lpush('worker_logs', JSON.stringify(e))
   }
-  await redis.ltrim('worker_logs', 0, 199)
+  ltrim('worker_logs', 0, 199)
 }
 
 export async function getWorkerLogs(limit = 100): Promise<WorkerLogEntry[]> {
   try {
-    const raw = await redis.lrange('worker_logs', 0, limit - 1)
-    return raw.map((r: string) => JSON.parse(r) as WorkerLogEntry)
+    const raw = lrange('worker_logs', 0, limit - 1)
+    return raw.map((r) => JSON.parse(r) as WorkerLogEntry)
   } catch {
     return []
   }
@@ -59,7 +107,7 @@ export interface BotState {
 
 export async function getBotState(): Promise<BotState | null> {
   try {
-    const raw = await redis.get('bot:state')
+    const raw = get('bot:state')
     if (!raw) return { running: false }
     return JSON.parse(raw) as BotState
   } catch {
@@ -68,35 +116,35 @@ export async function getBotState(): Promise<BotState | null> {
 }
 
 export async function setBotState(state: BotState): Promise<void> {
-  await redis.set('bot:state', JSON.stringify(state))
+  set('bot:state', JSON.stringify(state))
 }
 
 export async function addTransaction(transaction: Transaction): Promise<void> {
-  await redis.lpush('transactions', JSON.stringify(transaction))
-  await redis.ltrim('transactions', 0, 99)
+  lpush('transactions', JSON.stringify(transaction))
+  ltrim('transactions', 0, 99)
 }
 
 export async function getTransactions(limit = 50): Promise<Transaction[]> {
   try {
-    const raw = await redis.lrange('transactions', 0, limit - 1)
-    return raw.map((r: string) => JSON.parse(r) as Transaction)
+    const raw = lrange('transactions', 0, limit - 1)
+    return raw.map((r) => JSON.parse(r) as Transaction)
   } catch {
     return []
   }
 }
 
 export async function clearTransactions(): Promise<void> {
-  await redis.del('transactions')
+  del('transactions')
 }
 
 export async function setTransactions(transactions: Transaction[]): Promise<void> {
-  await redis.del('transactions')
+  del('transactions')
   if (transactions.length === 0) return
   const ordered = [...transactions].reverse()
   for (const t of ordered) {
-    await redis.lpush('transactions', JSON.stringify(t))
+    lpush('transactions', JSON.stringify(t))
   }
-  await redis.ltrim('transactions', 0, 99)
+  ltrim('transactions', 0, 99)
 }
 
 export async function getTransaction(hash: string): Promise<Transaction | null> {
@@ -112,44 +160,44 @@ export interface ManualTriggerLog {
 }
 
 export async function addManualTriggerLog(log: ManualTriggerLog): Promise<void> {
-  await redis.lpush('manual_triggers', JSON.stringify(log))
-  await redis.ltrim('manual_triggers', 0, 99)
+  lpush('manual_triggers', JSON.stringify(log))
+  ltrim('manual_triggers', 0, 99)
 }
 
 export async function getManualTriggerLogs(limit = 50): Promise<ManualTriggerLog[]> {
   try {
-    const raw = await redis.lrange('manual_triggers', 0, limit - 1)
-    return raw.map((r: string) => JSON.parse(r) as ManualTriggerLog)
+    const raw = lrange('manual_triggers', 0, limit - 1)
+    return raw.map((r) => JSON.parse(r) as ManualTriggerLog)
   } catch {
     return []
   }
 }
 
 export async function clearManualTriggerLogs(): Promise<void> {
-  await redis.del('manual_triggers')
+  del('manual_triggers')
 }
 
 export async function addError(error: ErrorLog): Promise<void> {
-  await redis.lpush('errors', JSON.stringify(error))
-  await redis.ltrim('errors', 0, 99)
+  lpush('errors', JSON.stringify(error))
+  ltrim('errors', 0, 99)
 }
 
 export async function getErrors(limit = 50): Promise<ErrorLog[]> {
   try {
-    const raw = await redis.lrange('errors', 0, limit - 1)
-    return raw.map((r: string) => JSON.parse(r) as ErrorLog)
+    const raw = lrange('errors', 0, limit - 1)
+    return raw.map((r) => JSON.parse(r) as ErrorLog)
   } catch {
     return []
   }
 }
 
 export async function clearErrors(): Promise<void> {
-  await redis.del('errors')
+  del('errors')
 }
 
 export async function getDelegatedOwners(): Promise<string[]> {
   try {
-    const raw = await redis.get('delegated:owners')
+    const raw = get('delegated:owners')
     if (!raw) return []
     return JSON.parse(raw) as string[]
   } catch {
@@ -163,7 +211,7 @@ export async function addDelegatedOwner(owner: string): Promise<void> {
   const owners = await getDelegatedOwners()
   if (!owners.includes(normalized)) {
     owners.push(normalized)
-    await redis.set('delegated:owners', JSON.stringify(owners))
+    set('delegated:owners', JSON.stringify(owners))
   }
 }
 
@@ -173,13 +221,13 @@ export async function removeDelegatedOwner(owner: string): Promise<void> {
   const owners = await getDelegatedOwners()
   const filtered = owners.filter((o) => o !== normalized)
   if (filtered.length !== owners.length) {
-    await redis.set('delegated:owners', JSON.stringify(filtered))
+    set('delegated:owners', JSON.stringify(filtered))
   }
 }
 
 export async function clearAllDelegatedOwners(): Promise<number> {
   const owners = await getDelegatedOwners()
-  await redis.set('delegated:owners', JSON.stringify([]))
+  set('delegated:owners', JSON.stringify([]))
   return owners.length
 }
 
@@ -195,7 +243,7 @@ const MIN_INTERVAL_HOURS = 30 / 3600
 
 export async function getPettingIntervalHours(): Promise<number> {
   try {
-    const raw = await redis.get(PETTING_INTERVAL_KEY)
+    const raw = get(PETTING_INTERVAL_KEY as keyof typeof store)
     const val = raw ? parseFloat(raw) : NaN
     if (typeof val === 'number' && !isNaN(val) && val >= MIN_INTERVAL_HOURS && val <= 24) return val
   } catch {
@@ -206,5 +254,5 @@ export async function getPettingIntervalHours(): Promise<number> {
 
 export async function setPettingIntervalHours(hours: number): Promise<void> {
   const clamped = Math.max(MIN_INTERVAL_HOURS, Math.min(24, hours))
-  await redis.set(PETTING_INTERVAL_KEY, String(clamped))
+  set(PETTING_INTERVAL_KEY as keyof typeof store, String(clamped))
 }

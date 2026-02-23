@@ -1,29 +1,25 @@
 # Aavegotchi Petter (Backend)
 
-Node.js backend for automated Aavegotchi petting on Base. Runs with local Redis. Pairs with **AavegotchiPetterUI** as the admin dashboard.
+Node.js backend for automated Aavegotchi petting on Base. Uses in-memory storage. Pairs with **AavegotchiPetterUI** as the admin dashboard.
 
 ## Architecture
 
-- **Aavegotchi-Petter** (this repo): Petting logic, REST API, cron, Redis
+- **Aavegotchi-Petter** (this repo): Petting logic, REST API, cron, in-memory storage
 - **AavegotchiPetterUI**: Nuxt admin dashboard (proxies to this API)
-- **Redis**: Local storage (bot state, delegated owners, logs)
+- **Storage**: In-memory (bot state, delegated owners, logs — data lost on restart)
 
 ## Prerequisites
 
 - Node.js 20+
-- Redis (local: `redis://localhost:6379`)
 
 ## Quick Start
 
 ```bash
-# 1. Start Redis (macOS)
-brew install redis && brew services start redis
-
-# 2. Configure
+# 1. Configure
 cp .env.example .env
-# Edit .env: REDIS_URL, PETTER_PRIVATE_KEY, REPORT_SECRET
+# Edit .env: PETTER_PRIVATE_KEY, REPORT_SECRET
 
-# 3. Run
+# 2. Run
 npm install
 npm run build
 npm start
@@ -35,7 +31,6 @@ Runs at http://localhost:3001
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `REDIS_URL` | Yes | `redis://localhost:6379` |
 | `PETTER_PRIVATE_KEY` | Yes | Wallet key (0x...) |
 | `REPORT_SECRET` | Yes | API auth (X-Report-Secret) |
 | `PETTER_ADDRESS` | Optional | Petter wallet address |

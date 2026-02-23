@@ -29,6 +29,8 @@ export default defineNuxtConfig({
     baseRpcUrl: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
     reportSecret: process.env.REPORT_SECRET,
     petterAddress: process.env.PETTER_ADDRESS || process.env.WALLET_ADDRESS,
+    petterApiUrl: process.env.PETTER_API_URL || 'http://localhost:3002',
+    petterTunnelUrl: process.env.PETTER_TUNNEL_URL || '',
     public: {
       allowedAddress: process.env.ALLOWED_ADDRESS || '0x2127aa7265d573aa467f1d73554d17890b872e76',
     }

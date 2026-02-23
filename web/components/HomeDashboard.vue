@@ -7,7 +7,31 @@
           <h1 class="text-3xl md:text-4xl font-bold tracking-tight">Aavegotchi Petter</h1>
           <p class="text-slate-400 mt-1">Automated petting on Base • Every 12 hours</p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <!-- Connection Status -->
+          <div class="flex items-center gap-2">
+            <div
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+              :class="connStatus.petter?.ok ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-red-500/20 border border-red-500/50'"
+            >
+              <div class="w-1.5 h-1.5 rounded-full" :class="connStatus.petter?.ok ? 'bg-emerald-400' : 'bg-red-400'" />
+              <span>Petter {{ connStatus.petter?.ok ? 'OK' : 'Offline' }}</span>
+              <span v-if="connStatus.petter?.ok && connStatus.petter?.latencyMs" class="text-slate-400">
+                ({{ connStatus.petter.latencyMs }}ms)
+              </span>
+            </div>
+            <div
+              v-if="connStatus.tunnel !== null"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+              :class="connStatus.tunnel?.ok ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-red-500/20 border border-red-500/50'"
+            >
+              <div class="w-1.5 h-1.5 rounded-full" :class="connStatus.tunnel?.ok ? 'bg-emerald-400' : 'bg-red-400'" />
+              <span>Tunnel {{ connStatus.tunnel?.ok ? 'OK' : 'Offline' }}</span>
+              <span v-if="connStatus.tunnel?.ok && connStatus.tunnel?.latencyMs" class="text-slate-400">
+                ({{ connStatus.tunnel.latencyMs }}ms)
+              </span>
+            </div>
+          </div>
           <div
             class="flex items-center gap-2 px-4 py-2 rounded-lg"
             :class="status.running ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-amber-500/20 border border-amber-500/50'"
@@ -169,7 +193,16 @@ interface DelegationStatus {
   gotchiCount: number;
 }
 
+interface ConnectionStatus {
+  petter: { ok: boolean; latencyMs?: number; error?: string };
+  tunnel: { ok: boolean; latencyMs?: number; error?: string } | null;
+}
+
 const health = ref<HealthData | null>(null);
+const connStatus = ref<ConnectionStatus>({
+  petter: { ok: false },
+  tunnel: null,
+});
 const history = ref<Transaction[]>([]);
 const delegationStatus = ref<DelegationStatus | null>(null);
 const walletBalance = ref<string | null>(null);
@@ -213,6 +246,15 @@ const fetchHealth = async () => {
     health.value = data;
   } catch (err) {
     console.error('Failed to fetch health:', err);
+  }
+};
+
+const fetchConnectionStatus = async () => {
+  try {
+    const data = await $fetch<ConnectionStatus>('/api/connection-status');
+    connStatus.value = data;
+  } catch (err) {
+    connStatus.value = { petter: { ok: false }, tunnel: null };
   }
 };
 
@@ -289,13 +331,14 @@ const formatDate = (val: string | number | undefined) => {
 
 onMounted(async () => {
   await checkAuth();
-  await fetchHealth();
+  await Promise.all([fetchHealth(), fetchConnectionStatus()]);
   if (isAuthenticated.value) {
     await fetchMe();
     await Promise.all([fetchHistory(), fetchDelegation(), fetchBalance()]);
   }
   loading.value = false;
   setInterval(fetchHealth, 30000);
+  setInterval(fetchConnectionStatus, 15000);
   if (isAuthenticated.value) {
     setInterval(() => Promise.all([fetchMe(), fetchHistory(), fetchBalance()]), 60000);
   }

@@ -3,8 +3,9 @@ import { getCookie, setCookie, deleteCookie } from 'h3';
 
 const DEFAULT_ALLOWED = '0x2127aa7265d573aa467f1d73554d17890b872e76'.toLowerCase();
 
-export function isAddressAllowed(address: string, allowedAddress?: string): boolean {
-  const allowed = (allowedAddress || DEFAULT_ALLOWED).toLowerCase();
+export function isAddressAllowed(address: string | undefined | null, allowedAddress?: string): boolean {
+  if (!address || typeof address !== 'string') return false;
+  const allowed = (allowedAddress || DEFAULT_ALLOWED)?.toLowerCase?.() ?? DEFAULT_ALLOWED;
   return address.toLowerCase() === allowed;
 }
 
