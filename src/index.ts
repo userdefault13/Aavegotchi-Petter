@@ -26,6 +26,7 @@ import { getPetterBalance } from './routes/petter-balance.js'
 import { getStats } from './routes/stats.js'
 import { getHealthApi } from './routes/health-api.js'
 import { startCron } from './cron.js'
+import { initDelegatedOwnersFromFile } from './lib/redis.js'
 
 const app = createApp()
 const router = createRouter()
@@ -105,6 +106,7 @@ app.use(router)
 
 const port = parseInt(process.env.PORT || '3002', 10)
 
+await initDelegatedOwnersFromFile()
 startCron()
 
 createServer(toNodeListener(app)).listen(port, '0.0.0.0', () => {

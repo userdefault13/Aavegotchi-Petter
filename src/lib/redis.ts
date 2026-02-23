@@ -1,7 +1,8 @@
 /**
  * In-memory storage - same interface as previous Redis-based implementation.
- * Data is lost on process restart.
+ * Delegated owners are persisted to data/delegated-owners.json so they survive restarts.
  */
+import { loadDelegatedOwnersFromFile, saveDelegatedOwnersToFile } from './delegated-owners-file.js'
 
 export interface Transaction {
   hash: string
@@ -205,6 +206,19 @@ export async function getDelegatedOwners(): Promise<string[]> {
   }
 }
 
+/** Load delegated owners from data/delegated-owners.json into memory. Call once at startup. */
+export async function initDelegatedOwnersFromFile(): Promise<void> {
+  const owners = await loadDelegatedOwnersFromFile()
+  if (owners.length > 0) {
+    set('delegated:owners', JSON.stringify(owners))
+  }
+}
+
+async function persistDelegatedOwners(): Promise<void> {
+  const owners = await getDelegatedOwners()
+  await saveDelegatedOwnersToFile(owners)
+}
+
 export async function addDelegatedOwner(owner: string): Promise<void> {
   if (!owner || typeof owner !== 'string') return
   const normalized = owner.toLowerCase()
@@ -212,6 +226,7 @@ export async function addDelegatedOwner(owner: string): Promise<void> {
   if (!owners.includes(normalized)) {
     owners.push(normalized)
     set('delegated:owners', JSON.stringify(owners))
+    await persistDelegatedOwners()
   }
 }
 
@@ -222,12 +237,14 @@ export async function removeDelegatedOwner(owner: string): Promise<void> {
   const filtered = owners.filter((o) => o !== normalized)
   if (filtered.length !== owners.length) {
     set('delegated:owners', JSON.stringify(filtered))
+    await persistDelegatedOwners()
   }
 }
 
 export async function clearAllDelegatedOwners(): Promise<number> {
   const owners = await getDelegatedOwners()
   set('delegated:owners', JSON.stringify([]))
+  await persistDelegatedOwners()
   return owners.length
 }
 
