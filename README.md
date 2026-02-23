@@ -6,7 +6,7 @@ Node.js backend for automated Aavegotchi petting on Base. Uses in-memory storage
 
 - **Aavegotchi-Petter** (this repo): Petting logic, REST API, cron, in-memory storage
 - **AavegotchiPetterUI**: Nuxt admin dashboard (proxies to this API)
-- **Storage**: In-memory (bot state, delegated owners, logs — data lost on restart)
+- **Storage**: Upstash KV (when configured) or in-memory + JSON file
 
 ## Prerequisites
 
@@ -31,6 +31,7 @@ Runs at http://localhost:3001
 
 | Variable | Required | Description |
 |----------|----------|-------------|
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` | For AarcadeGh-t alignment | Upstash KV (same as AarcadeGh-t). When set, Petter shares delegated owners with aarcadeghst.com. |
 | `PETTER_PRIVATE_KEY` | Yes | Wallet key (0x...) |
 | `REPORT_SECRET` | Yes | API auth (X-Report-Secret) |
 | `PETTER_ADDRESS` | Optional | Petter wallet address |

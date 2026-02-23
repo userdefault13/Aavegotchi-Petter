@@ -1,8 +1,16 @@
 /**
  * In-memory storage - same interface as previous Redis-based implementation.
- * Delegated owners are persisted to data/delegated-owners.json so they survive restarts.
+ * Delegated owners: use Upstash KV when KV_REST_API_URL + KV_REST_API_TOKEN are set (shared with AarcadeGh-t).
+ * Otherwise: persist to data/delegated-owners.json so they survive restarts.
  */
+import { Redis as UpstashRedis } from '@upstash/redis'
 import { loadDelegatedOwnersFromFile, saveDelegatedOwnersToFile } from './delegated-owners-file.js'
+
+const KV_REST_API_URL = process.env.KV_REST_API_URL
+const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN
+const useUpstash = !!(KV_REST_API_URL && KV_REST_API_TOKEN)
+const upstash = useUpstash ? new UpstashRedis({ url: KV_REST_API_URL, token: KV_REST_API_TOKEN }) : null
+const DELEGATED_OWNERS_KEY = 'delegated:owners'
 
 export interface Transaction {
   hash: string
@@ -197,6 +205,16 @@ export async function clearErrors(): Promise<void> {
 }
 
 export async function getDelegatedOwners(): Promise<string[]> {
+  if (upstash) {
+    try {
+      const raw = (await upstash.get(DELEGATED_OWNERS_KEY)) as string | null
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as unknown
+      return Array.isArray(parsed) ? parsed.map((a) => String(a).toLowerCase()) : []
+    } catch {
+      return []
+    }
+  }
   try {
     const raw = get('delegated:owners')
     if (!raw) return []
@@ -206,16 +224,17 @@ export async function getDelegatedOwners(): Promise<string[]> {
   }
 }
 
-/** Load delegated owners from data/delegated-owners.json into memory. Call once at startup. */
+/** Load delegated owners from file into memory at startup. No-op when using Upstash KV. */
 export async function initDelegatedOwnersFromFile(): Promise<void> {
+  if (upstash) return
   const owners = await loadDelegatedOwnersFromFile()
   if (owners.length > 0) {
     set('delegated:owners', JSON.stringify(owners))
   }
 }
 
-async function persistDelegatedOwners(): Promise<void> {
-  const owners = await getDelegatedOwners()
+async function persistDelegatedOwners(owners: string[]): Promise<void> {
+  if (upstash) return
   await saveDelegatedOwnersToFile(owners)
 }
 
@@ -223,10 +242,17 @@ export async function addDelegatedOwner(owner: string): Promise<void> {
   if (!owner || typeof owner !== 'string') return
   const normalized = owner.toLowerCase()
   const owners = await getDelegatedOwners()
-  if (!owners.includes(normalized)) {
-    owners.push(normalized)
+  if (owners.includes(normalized)) return
+  owners.push(normalized)
+  if (upstash) {
+    try {
+      await upstash.set(DELEGATED_OWNERS_KEY, JSON.stringify(owners))
+    } catch (err) {
+      console.error('[petter] Failed to add delegated owner to KV:', err)
+    }
+  } else {
     set('delegated:owners', JSON.stringify(owners))
-    await persistDelegatedOwners()
+    await persistDelegatedOwners(owners)
   }
 }
 
@@ -235,17 +261,33 @@ export async function removeDelegatedOwner(owner: string): Promise<void> {
   const normalized = owner.toLowerCase()
   const owners = await getDelegatedOwners()
   const filtered = owners.filter((o) => o !== normalized)
-  if (filtered.length !== owners.length) {
+  if (filtered.length === owners.length) return
+  if (upstash) {
+    try {
+      await upstash.set(DELEGATED_OWNERS_KEY, JSON.stringify(filtered))
+    } catch (err) {
+      console.error('[petter] Failed to remove delegated owner from KV:', err)
+    }
+  } else {
     set('delegated:owners', JSON.stringify(filtered))
-    await persistDelegatedOwners()
+    await persistDelegatedOwners(filtered)
   }
 }
 
 export async function clearAllDelegatedOwners(): Promise<number> {
   const owners = await getDelegatedOwners()
-  set('delegated:owners', JSON.stringify([]))
-  await persistDelegatedOwners()
-  return owners.length
+  const count = owners.length
+  if (upstash) {
+    try {
+      await upstash.set(DELEGATED_OWNERS_KEY, JSON.stringify([]))
+    } catch (err) {
+      console.error('[petter] Failed to clear delegated owners in KV:', err)
+    }
+  } else {
+    set('delegated:owners', JSON.stringify([]))
+    await persistDelegatedOwners([])
+  }
+  return count
 }
 
 export async function isDelegatedOwner(owner: string): Promise<boolean> {

@@ -9,6 +9,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
+    "@upstash/redis": "^1.36.2",
     "dotenv": "^16.4.5",
     "h3": "^1.15.5",
     "node-cron": "^3.0.3",

@@ -28,7 +28,7 @@ export async function postDelegationRegister(event: H3Event) {
   }
 
   const normalized = ensureRawAddress(ownerAddress)
-  const petterAddress = process.env.PETTER_ADDRESS || '0x9a3E95f448f3daB367dd9213D4554444faa272F1'
+  const petterAddress = process.env.PETTER_ADDRESS || '0x9b23dB04457D9aF944858681331E40da8c91981F'
   const baseRpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org'
 
   const client = createPublicClient({
