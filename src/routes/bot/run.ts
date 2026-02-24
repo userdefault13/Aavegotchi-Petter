@@ -11,6 +11,13 @@ export async function postBotRun(event: H3Event) {
   const petterAddress = process.env.PETTER_ADDRESS || '0x9a3E95f448f3daB367dd9213D4554444faa272F1'
   const baseRpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org'
 
+  // Debug: verify which address will sign (derived from private key)
+  if (privateKey?.startsWith('0x')) {
+    const { privateKeyToAccount } = await import('viem/accounts')
+    const account = privateKeyToAccount(privateKey as `0x${string}`)
+    console.log('[bot/run] Signing with address:', account.address, '| PETTER_ADDRESS env:', petterAddress)
+  }
+
   if (!privateKey || !privateKey.startsWith('0x')) {
     throw new Error('PETTER_PRIVATE_KEY not configured')
   }

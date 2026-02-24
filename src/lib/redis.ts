@@ -10,6 +10,11 @@ const KV_REST_API_URL = process.env.KV_REST_API_URL
 const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN
 const useUpstash = !!(KV_REST_API_URL && KV_REST_API_TOKEN)
 const upstash = useUpstash ? new UpstashRedis({ url: KV_REST_API_URL, token: KV_REST_API_TOKEN }) : null
+if (useUpstash) {
+  console.log('[KV] Using Upstash KV for delegated owners')
+} else {
+  console.log('[KV] Upstash not configured, using local storage (data/delegated-owners.json)')
+}
 const DELEGATED_OWNERS_KEY = 'delegated:owners'
 
 export interface Transaction {
@@ -207,11 +212,16 @@ export async function clearErrors(): Promise<void> {
 export async function getDelegatedOwners(): Promise<string[]> {
   if (upstash) {
     try {
-      const raw = (await upstash.get(DELEGATED_OWNERS_KEY)) as string | null
+      const raw = (await upstash.get(DELEGATED_OWNERS_KEY)) as string | string[] | null
+      console.log('[KV] getDelegatedOwners raw:', raw === null ? 'null' : Array.isArray(raw) ? `array(${raw.length})` : typeof raw)
       if (!raw) return []
-      const parsed = JSON.parse(raw) as unknown
-      return Array.isArray(parsed) ? parsed.map((a) => String(a).toLowerCase()) : []
-    } catch {
+      // Upstash auto-deserializes JSON, so raw may already be an array
+      const parsed = Array.isArray(raw) ? raw : (typeof raw === 'string' ? (JSON.parse(raw) as unknown) : [])
+      const owners = Array.isArray(parsed) ? parsed.map((a) => String(a).toLowerCase()) : []
+      console.log('[KV] getDelegatedOwners returning', owners.length, 'owner(s)')
+      return owners
+    } catch (err) {
+      console.error('[KV] getDelegatedOwners error:', err)
       return []
     }
   }
